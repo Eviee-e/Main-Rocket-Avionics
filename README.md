@@ -23,7 +23,8 @@ The examples explore the lower-level steps involved in bringing up embedded sens
 - Reading factory calibration coefficients and applying temperature and pressure compensation for barometric sensors.
 - Converting raw inertial measurements into scaled acceleration, angular velocity, and temperature readings.
 - Polling for measurement readiness and handling selected I2C read failures in the reusable BMP388 driver.
-- Printing sensor measurements and received GPS serial text for interactive bench inspection.
+- Printing sensor measurements and receiving GPS serial text for interactive bench inspection.
+- Converting latitude and longitude from supported NMEA GGA sentences to decimal degrees, and displaying fix status, satellite count, and the reported altitude field.
 
 The repository also makes the current boundaries visible: examples run separately, do not combine measurements into a common telemetry stream, and do not implement a flight-control or navigation stack.
 
@@ -34,9 +35,9 @@ The repository also makes the current boundaries visible: examples run separatel
 | BMP388 barometer / temperature sensor | `main.py`, `main_bmp388.py`, `bmp388.py` | I2C or SPI, depending on the example | Read compensated pressure and temperature measurements. |
 | BMP280 barometer / temperature sensor | `main1.py` | I2C | Read pressure and temperature using BMP280 calibration data. |
 | MPU9250-family inertial measurement unit | `mpu9250.py`, `main_mpu9250.py` | I2C | Read accelerometer, gyroscope, and temperature data; the demo also attempts magnetometer readings. |
-| u-blox NEO-M9N GPS module | `main_neo_m9n.py` | UART1 | Receive and print serial text from the module. |
+| u-blox NEO-M9N GPS module | `main_neo_m9n.py`, `neo-m9n.py` | UART1 or UART0, depending on the example | `main_neo_m9n.py` displays received serial lines; `neo-m9n.py` parses selected GGA sentences and displays fix status, coordinates, satellite count, and altitude. |
 
-The scripts contain example Pico GPIO assignments, including I2C on GP0/GP1, SPI on GP2-GP5, and UART1 on GP4/GP5. These assignments belong to individual examples, not a combined wiring plan; pins are reused by different demos. Check each script and the documentation for the specific breakout board before connecting hardware. Confirm supply voltage and logic-level compatibility for the exact boards in use.
+The scripts contain example Pico GPIO assignments, including I2C on GP0/GP1, SPI on GP2-GP5, UART1 on GP4/GP5, and UART0 on GP0/GP1 for `neo-m9n.py` at 38,400 baud. These assignments belong to individual examples, not a combined wiring plan; pins are reused by different demos. Check each script and the documentation for the specific breakout board before connecting hardware. Confirm supply voltage and logic-level compatibility for the exact boards in use.
 
 ## Repository Guide
 
@@ -50,7 +51,8 @@ The scripts contain example Pico GPIO assignments, including I2C on GP0/GP1, SPI
 | `main1.py` | BMP280 I2C implementation and polling example. |
 | `mpu9250.py` | MPU9250-family I2C register access and measurement scaling. |
 | `main_mpu9250.py` | IMU demonstration script using `mpu9250.py`, with magnetometer readings when available. |
-| `main_neo_m9n.py` | UART receive loop for displaying GPS module text. It does not parse NMEA fields into coordinates. |
+| `main_neo_m9n.py` | UART1 receive loop for displaying raw GPS module text. |
+| `neo-m9n.py` | UART0 GPS example that converts latitude/longitude from `$GNGGA` and `$GPGGA` sentences to decimal degrees and displays fix status, satellite count, and altitude. It does not parse `$GPRMC` despite the broader wording in its function docstring. |
 | `.vscode/extensions.json` | Suggested VS Code extensions for working in this project. |
 
 ## Running An Example
@@ -68,7 +70,7 @@ The code uses MicroPython-provided modules such as `machine` and `time`, along w
 
 1. Connect one sensor using the pin assignments in its selected example. These scripts are independent; do not assume that their pin maps can be combined.
 2. Open the desired script in a MicroPython-capable editor and select the connected board/interpreter.
-3. For `main_bmp388.py`, also copy `bmp388_driver.py` to the board. For `main_mpu9250.py`, also copy `mpu9250.py`.
+3. For `main_bmp388.py`, also copy `bmp388_driver.py` to the board. For `main_mpu9250.py`, also copy `mpu9250.py`. The GPS examples are standalone; use the UART pins and baud rate specified by the selected script.
 4. Run one example and inspect its output in the serial/REPL console. The polling examples continue until interrupted; stop them with the editor's stop control or a keyboard interrupt.
 
 Use the file descriptions above to select the sensor and transport. In particular, `main_bmp280.py` is a BMP388 SPI example despite its name.
@@ -76,7 +78,8 @@ Use the file descriptions above to select the sensor and transport. In particula
 ## Current Scope And Limitations
 
 - These are separate bring-up and polling examples, not a consolidated avionics program. They do not synchronize or fuse measurements from multiple sensors.
-- The GPS example prints received serial text; it does not decode position, velocity, or time into a structured navigation solution.
+- `main_neo_m9n.py` prints raw received serial text. `neo-m9n.py` parses only `$GNGGA` and `$GPGGA` sentences for fix status, latitude, longitude, satellite count, and altitude; it does not parse `$GPRMC`, decode velocity or time, or produce a structured navigation solution.
+- The GGA parser does not validate NMEA checksums and has limited malformed-field handling. GPS parsing and fix behavior should be tested against captured receiver output before being relied upon.
 - The IMU example reads scaled sensor values; it does not estimate attitude or orientation.
 - There is no data logger, telemetry protocol, command interface, actuator output, or flight-control logic.
 - No automated test suite, recorded test vectors, or documented hardware validation results are included. Hardware-dependent behavior should be verified on the intended board and sensor revision.
@@ -92,9 +95,9 @@ GPS modules can emit live location data. Treat captured serial output and logs a
 ## Possible Next Engineering Steps
 
 1. Reconcile BMP388 compensation formulas against the datasheet and add reference-vector tests for both I2C and SPI paths.
-2. Add repeatable host-side tests for scaling, byte decoding, and compensation calculations, with hardware-independent mocks for bus access.
+2. Add repeatable host-side tests for sensor scaling, byte decoding, BMP compensation, and GPS coordinate/NMEA parsing, with hardware-independent mocks for bus access.
 3. Document exact breakout-board models, wiring, firmware versions, startup behavior, and expected measurement ranges.
-4. Add structured GPS parsing and timestamped, common-format sensor samples if an integrated telemetry demonstration is desired.
+4. Extend GPS parsing with validated sentence handling and timestamps, then define a common sample format if an integrated telemetry demonstration is desired.
 5. Define and verify error handling, sampling timing, and data-quality behavior before expanding toward any higher-level system.
 
 These are future improvements, not features currently implemented in this repository.
